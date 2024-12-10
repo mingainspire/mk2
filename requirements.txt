@@ -1,4 +1,4 @@
-torch==2.0.1
+torch==2.2.0
 pesq==0.0.4
 pystoi==0.3.3
 pyyaml==5.4.1
