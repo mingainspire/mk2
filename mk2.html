@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/themes/prism.min.css" rel="stylesheet" />
+    <style>
+        .e-ink {
+            font-family: "Courier New", Courier, monospace;
+            color: #000;
+            background-color: #f5f5f5;
+            border: 1px solid #ccc;
+        }
+        .applet {
+            transform: translateY(-100%);
+            transition: transform 0.3s ease-in-out;
+        }
+        .applet.open {
+            transform: translateY(0);
+        }
+        .input-container {
+            margin-bottom: 20px;
+        }
+        .chat-input {
+            width: 100%;
+            height: 50px;
+            border: none;
+            background-color: #fff;
+            padding: 10px;
+            box-sizing: border-box;
+            resize: none;
+            outline: none;
+            font-size: 16px;
+        }
+        .code-block {
+            position: relative;
+            margin-bottom: 10px;
+        }
+        .copy-button {
+            position: absolute;
+            top: 5px;
+            right: 5px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: background-color 0.3s;
+        }
+        .copy-button:hover {
+            background-color: #0056b3;
+        }
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .user-message {
+            align-self: flex-end;
+            background-color: #e0f7fa;
+        }
+        .bot-message {
+            align-self: flex-start;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex items-center justify-center relative">
+    <div class="w-full h-full bg-white shadow-md rounded-md p-4 flex flex-col relative">
+        <div class="flex justify-between items-center mb-4">
+            <button id="powerButton" class="w-6 h-6 bg-black rounded-full"></button>
+            <button id="sendButton" class="ml-2 bg-gray-800 text-white px-4 py-2 rounded-md">Send</button>
+        </div>
+        <div class="input-container">
+            <textarea class="chat-input" id="messageInput" placeholder="Write your message..."></textarea>
+        </div>
+        <div id="conversation" class="flex-grow e-ink p-4 overflow-y-auto mb-4"></div>
+    </div>
+
+    <div id="applet" class="applet fixed top-0 right-0 w-64 h-full bg-white shadow-md p-4">
+        <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-bold">Settings</h2>
+            <button id="closeApplet" class="text-gray-800 text-2xl">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700">Base URL</label>
+            <input id="baseUrl" type="text" class="w-full border border-gray-300 rounded-md p-2" placeholder="Enter base URL...">
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700">API Key</label>
+            <input id="apiKey" type="text" class="w-full border border-gray-300 rounded-md p-2" placeholder="Enter API key...">
+        </div>
+        <div class="mb-4">
+            <label class="block text-gray-700">Preferred Model</label>
+            <input id="preferredModel" type="text" class="w-full border border-gray-300 rounded-md p-2" placeholder="Enter preferred model...">
+        </div>
+        <div>
+            <label class="block text-gray-700">System Prompt</label>
+            <textarea id="systemPrompt" class="w-full border border-gray-300 rounded-md p-2 h-24" placeholder="Enter system prompt..."></textarea>
+        </div>
+        <button id="saveSettings" class="mt-4 bg-gray-800 text-white px-4 py-2 rounded-md">Save</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.23.0/prism.min.js"></script>
+    <script>
+    const sendButton = document.getElementById("sendButton");
+    const messageInput = document.getElementById("messageInput");
+    const conversation = document.getElementById("conversation");
+    const powerButton = document.getElementById("powerButton");
+    const applet = document.getElementById("applet");
+    const closeApplet = document.getElementById("closeApplet");
+    const saveSettings = document.getElementById("saveSettings");
+
+    let baseUrl = "";
+    let apiKey = "";
+    let preferredModel = "";
+    let systemPrompt = "";
+
+    powerButton.addEventListener("click", () => {
+        applet.classList.toggle("open");
+    });
+
+    closeApplet.addEventListener("click", () => {
+        applet.classList.remove("open");
+    });
+
+    // Input Validation
+    function isValidUrl(url) {
+        const pattern = new RegExp("^(https?:\\/\\/)?"+ // protocol
+            "((([a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\\.)+[a-z]{2,}|"+ // domain name
+            "localhost|"+ // localhost
+            "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}|"+ // IP address
+            "\\[?[a-f0-9]*:[a-f0-9:%.]*\\]?)"+ // IPv6
+            "(\\:\\d+)?(\\/[-a-z0-9%_.~+]*)*"+ // port and path
+            "(\\?[;&a-z0-9%_.~+=-]*)?"+ // query string
+            "(\\#[-a-z0-9_]*)?$","i"); // fragment locator
+        return !!pattern.test(url);
+    }
+
+    saveSettings.addEventListener("click", () => {
+        const newBaseUrl = document.getElementById("baseUrl").value;
+        if (!isValidUrl(newBaseUrl)) {
+            alert("Please enter a valid URL.");
+            return;
+        }
+        baseUrl = newBaseUrl;
+        apiKey = document.getElementById("apiKey").value;
+        preferredModel = document.getElementById("preferredModel").value;
+        systemPrompt = document.getElementById("systemPrompt").value;
+
+        // Save to localStorage
+        localStorage.setItem("baseUrl", baseUrl);
+        localStorage.setItem("apiKey", apiKey);
+        localStorage.setItem("preferredModel", preferredModel);
+        localStorage.setItem("systemPrompt", systemPrompt);
+
+        applet.classList.remove("open");
+    });
+
+    // Load settings from localStorage on page load
+    window.onload = () => {
+        baseUrl = localStorage.getItem("baseUrl") || "";
+        apiKey = localStorage.getItem("apiKey") || "";
+        preferredModel = localStorage.getItem("preferredModel") || "";
+        systemPrompt = localStorage.getItem("systemPrompt") || "";
+
+        document.getElementById("baseUrl").value = baseUrl;
+        document.getElementById("apiKey").value = apiKey;
+        document.getElementById("preferredModel").value = preferredModel;
+        document.getElementById("systemPrompt").value = systemPrompt;
+    };
+
+    async function addMessage() {
+        const message = messageInput.value.trim();
+        if (message) {
+            // Create user message element
+            const userMessageElement = document.createElement("div");
+            userMessageElement.className = 'message user-message';
+            userMessageElement.textContent = message;
+            conversation.appendChild(userMessageElement);
+            messageInput.value = "";
+            conversation.scrollTop = conversation.scrollHeight;
+
+            try {
+                const response = await fetch(`${baseUrl}/chat/completions`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: preferredModel,
+                        messages: [
+                            { role: "system", content: systemPrompt },
+                            { role: "user", content: message }
+                        ]
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const botMessageContent = data.choices[0].message.content.trim();
+
+                // Create bot message element
+                const botMessageElement = document.createElement("div");
+                botMessageElement.className = 'message bot-message';
+
+                // Check if the bot message is a code block
+                if (botMessageContent.startsWith("```") && botMessageContent.endsWith("```")) {
+                    // Extract the code and language
+                    const codeBlock = botMessageContent.substring(3, botMessageContent.length - 3).trim();
+                    const languageStart = codeBlock.indexOf("\n");
+                    const language = languageStart !== -1 ? codeBlock.substring(0, languageStart) : "javascript";
+                    const code = languageStart !== -1 ? codeBlock.substring(languageStart + 1) : codeBlock;
+
+                    // Create code block element
+                    const preElement = document.createElement("pre");
+                    preElement.className = 'code-block';
+
+                    const codeElement = document.createElement("code");
+                    codeElement.className = `language-${language}`;
+                    codeElement.textContent = code;
+
+                    preElement.appendChild(codeElement);
+                    botMessageElement.appendChild(preElement);
+
+                    // Add copy button
+                    const copyButton = document.createElement("button");
+                    copyButton.className = 'copy-button';
+                    copyButton.textContent = 'Copy';
+                    copyButton.onclick = () => {
+                        navigator.clipboard.writeText(code).then(() => {
+                            copyButton.textContent = 'Copied!';
+                            setTimeout(() => {
+                                copyButton.textContent = 'Copy';
+                            }, 2000);
+                        }).catch(err => {
+                            console.error('Failed to copy: ', err);
+                        });
+                    };
+
+                    preElement.appendChild(copyButton);
+                } else {
+                    botMessageElement.textContent = botMessageContent;
+                }
+
+                conversation.appendChild(botMessageElement);
+                conversation.scrollTop = conversation.scrollHeight;
+                Prism.highlightAll();
+            } catch (error) {
+                console.error("Error:", error);
+                const errorMessageElement = document.createElement("p");
+                errorMessageElement.textContent = `Error: ${error.message}`;
+                conversation.appendChild(errorMessageElement);
+                conversation.scrollTop = conversation.scrollHeight;
+            }
+        }
+    }
+
+    sendButton.addEventListener("click", addMessage);
+
+    messageInput.addEventListener("keypress", (e) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            addMessage();
+        }
+    });
+</script>
+
+</body>
+</html>
